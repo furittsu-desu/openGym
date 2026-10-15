@@ -287,6 +287,37 @@ test('the password routes keep the origin check: no login CSRF', async t => {
   assert.equal(ok.status, 200);
 });
 
+test('multiple origins in ORIGIN and same-host Origin fallback work for password login', async t => {
+  const altOrigin = 'http://100.99.37.48:8080';
+  const h = await startServer(t, {
+    env: { ORIGIN: `${ORIGIN},${altOrigin}` },
+    users: [withPassword('u1', 'Ana')]
+  });
+  // Alternate origin explicitly listed in ORIGIN env
+  const altOk = await h.req('POST', '/api/login/password', {
+    body: { name: 'Ana', password: GOOD },
+    headers: { 'Sec-Fetch-Site': '', Origin: altOrigin },
+    ip: '198.51.100.73'
+  });
+  assert.equal(altOk.status, 200);
+
+  // Same-host fallback: Origin matches X-Forwarded-Host header
+  const sameHostOk = await h.req('POST', '/api/login/password', {
+    body: { name: 'Ana', password: GOOD },
+    headers: { 'Sec-Fetch-Site': '', Origin: 'http://192.168.1.99:8080', 'X-Forwarded-Host': '192.168.1.99:8080' },
+    ip: '198.51.100.74'
+  });
+  assert.equal(sameHostOk.status, 200);
+
+  // Cross-host attempt without Sec-Fetch-Site is refused
+  const crossHost = await h.req('POST', '/api/login/password', {
+    body: { name: 'Ana', password: GOOD },
+    headers: { 'Sec-Fetch-Site': '', Origin: 'http://evil.example', 'X-Forwarded-Host': '192.168.1.99:8080' },
+    ip: '198.51.100.75'
+  });
+  assert.equal(crossHost.status, 403);
+});
+
 test('registration with a password: policy, unique names among password holders, and the invite', async t => {
   const h = await startServer(t, {
     env: { INVITE_ONLY: '1' },

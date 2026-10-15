@@ -39,7 +39,9 @@ import { excusedOn, nudgeFor, nudgeWindowOpen, toneOf } from './nudge.js';
 const PORT = +(process.env.PORT || 3000);
 const DATA = process.env.DATA_DIR || '/data';
 const RP_ID = process.env.RP_ID || 'localhost';
-const ORIGIN = process.env.ORIGIN || 'http://localhost:8080';
+const ORIGIN_RAW = process.env.ORIGIN || 'http://localhost:8080';
+const ORIGIN_LIST = ORIGIN_RAW.split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
+const ORIGIN = ORIGIN_LIST[0] || 'http://localhost:8080';
 const RP_NAME = process.env.RP_NAME || 'openGym';
 // Admin dashboard (issue): admins are matched by uid (or the admin flag FIRST_USER_ADMIN sets);
 // INVITE_ONLY gates new signups behind a code the admin generates. Off by default, so a fresh
@@ -673,7 +675,19 @@ function csrfOk(req, key) {
   // Browsers put an Origin on every state-changing request and a page cannot suppress it, so the
   // forgery this exists to stop always carries one.
   if (!origin) return true;
-  return originsMatch(origin, ORIGIN);
+  if (ORIGIN_LIST.some(o => originsMatch(origin, o))) return true;
+  try {
+    const origUrl = new URL(origin);
+    const reqHostRaw = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+    if (reqHostRaw) {
+      const origHost = origUrl.host.toLowerCase();
+      const origHostname = origUrl.hostname.toLowerCase();
+      const reqHost = reqHostRaw.toLowerCase();
+      const reqHostname = reqHostRaw.split(':')[0].toLowerCase();
+      if (origHost === reqHost || origHostname === reqHostname) return true;
+    }
+  } catch {}
+  return false;
 }
 
 /* ---------- challenge store (in-memory, 5 min TTL) ---------- */
@@ -1126,7 +1140,7 @@ async function passkeyStepUp(user, body) {
   if (!cred) return false;
   try {
     const v = await verifyAuthenticationResponse({
-      response: body.credential, expectedChallenge: c.challenge, expectedOrigin: ORIGIN, expectedRPID: RP_ID,
+      response: body.credential, expectedChallenge: c.challenge, expectedOrigin: ORIGIN_LIST.length > 1 ? ORIGIN_LIST : ORIGIN, expectedRPID: RP_ID,
       requireUserVerification: false,
       credential: { id: cred.id, publicKey: b64uToBuf(cred.publicKey), counter: cred.counter, transports: cred.transports }
     });
@@ -1557,7 +1571,7 @@ async function newPasskey(req, res, c, body, ev, user) {
   let verification;
   try {
     verification = await verifyRegistrationResponse({
-      response: body.credential, expectedChallenge: c.challenge, expectedOrigin: ORIGIN, expectedRPID: RP_ID,
+      response: body.credential, expectedChallenge: c.challenge, expectedOrigin: ORIGIN_LIST.length > 1 ? ORIGIN_LIST : ORIGIN, expectedRPID: RP_ID,
       requireUserVerification: false
     });
   } catch (e) {
@@ -1994,7 +2008,7 @@ const routes = {
       verification = await verifyRegistrationResponse({
         response: body.credential,
         expectedChallenge: c.challenge,
-        expectedOrigin: ORIGIN,
+        expectedOrigin: ORIGIN_LIST.length > 1 ? ORIGIN_LIST : ORIGIN,
         expectedRPID: RP_ID,
         requireUserVerification: false
       });
@@ -2066,7 +2080,7 @@ const routes = {
       verification = await verifyAuthenticationResponse({
         response: body.credential,
         expectedChallenge: c.challenge,
-        expectedOrigin: ORIGIN,
+        expectedOrigin: ORIGIN_LIST.length > 1 ? ORIGIN_LIST : ORIGIN,
         expectedRPID: RP_ID,
         requireUserVerification: false,
         credential: {
@@ -2664,7 +2678,7 @@ const server = http.createServer(async (req, res) => {
     // Logged, not audited: this is reachable without a session, and an audit entry per attempt
     // would let anyone fill the log. An operator who has genuinely mis-set ORIGIN needs to see
     // the mismatch, and the container log is where they will look.
-    console.warn('refused cross-origin', key, 'origin=' + req.headers.origin, 'expected=' + ORIGIN);
+    console.warn('refused cross-origin', key, 'origin=' + req.headers.origin, 'expected=' + ORIGIN_LIST.join(', '));
     return json(res, 403, { error: 'cross-origin request refused' });
   }
   // After the origin check, so a forged request spends nobody's budget. The password routes only
@@ -2706,4 +2720,4 @@ server.headersTimeout = 60000;
 // port that was actually bound: with PORT=0 the OS picks one, and a caller that did not choose it
 // (the tests spawn the server that way, and so does anyone running two instances on one box) has
 // no other way to learn it.
-server.listen(PORT, () => console.log(`gym-api on :${server.address().port} (rpID=${RP_ID}, origin=${ORIGIN})`));
+server.listen(PORT, () => console.log(`gym-api on :${server.address().port} (rpID=${RP_ID}, origin=${ORIGIN_LIST.join(',')})`));

@@ -65,6 +65,7 @@ server {
         # makes the header mean anything.
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
         # Same reasoning, and the API trusts this one FIRST. Empty by default, which drops the
         # header entirely, so a direct client cannot forge it. Cloudflare users set
         # CF_CONNECTING_IP=$http_cf_connecting_ip to let the real one through — correct only when
@@ -103,6 +104,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header CF-Connecting-IP "${CF_CONNECTING_IP}";
     }
 
