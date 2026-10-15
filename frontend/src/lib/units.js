@@ -25,6 +25,22 @@ export function convertBodyWeight(value, from, to) {
   return Math.round((to === 'lb' ? v * LB_PER_KG : v / LB_PER_KG) * 10) / 10
 }
 
+/** Formats the alternate unit conversion string (e.g. ~61.2 kg for 135 lb, or ~132.3 lb for 60 kg) */
+export function dualUnit(value, unit) {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return ''
+  const v = Number(value)
+  if (v <= 0) return ''
+  if (unit === 'lb') {
+    const kg = Math.round(v / LB_PER_KG * 10) / 10
+    return `~${kg} kg`
+  }
+  if (unit === 'kg') {
+    const lb = Math.round(v * LB_PER_KG * 10) / 10
+    return `~${lb} lb`
+  }
+  return ''
+}
+
 const convSet = (set, from, to) => {
   if (!set || typeof set !== 'object') return set
   const out = { ...set }
@@ -76,25 +92,44 @@ const convEntry = (e, from, to) => {
   }
 }
 
+/** The unit bodyweight is displayed/stored in: 'kg' or 'lb'. Defaults to S.bwUnit, then S.unit, then 'kg'. */
+export const bwUnitOf = S => S?.bwUnit || S?.unit || 'kg'
+
+/** Convert only bodyweight and targetW in state between kg and lb, and update S.bwUnit */
+export function convertBodyWeightState(S, to) {
+  const from = bwUnitOf(S)
+  if (from === to) return { ...S, bwUnit: to }
+  const bw = v => convertBodyWeight(v, from, to)
+  const out = { ...S, bwUnit: to }
+  if (Array.isArray(S.bodyweight)) out.bodyweight = S.bodyweight.map(b => ({ ...b, w: bw(b.w) }))
+  if (S.targetW != null) out.targetW = bw(S.targetW)
+  return out
+}
+
 /** A new state object with every weight expressed in `to`, and `unit` set to it. */
 export function convertStateUnit(S, to) {
   const from = S.unit || 'kg'
   if (from === to) return S
   const c = v => convertWeight(v, from, to)
   const bw = v => convertBodyWeight(v, from, to)
+  // Only convert body weight if S.bwUnit was not explicitly decoupled from the old workout unit
+  const shouldConvertBW = !S.bwUnit || S.bwUnit === from
   // A session carries its body weight of the day and a cached total volume; History rows, the
   // detail header, the month calendar and the heatmap tooltips read those rather than summing
   // sets, so they must move with the sets or show kg totals under an lb label (QA C11). The
   // volume is re-added from the converted sets, so it agrees with the set list to the number.
   const convSession = s => {
     const out = { ...s, entries: (s.entries || []).map(e => convEntry(e, from, to)) }
-    if (out.bw != null) out.bw = bw(out.bw)
+    if (shouldConvertBW && out.bw != null) out.bw = bw(out.bw)
     if (Number.isFinite(out.vol)) out.vol = workoutVolume({ entries: out.entries.filter(e => Array.isArray(e?.sets)) })
     return out
   }
   const out = { ...S, unit: to }
-  if (Array.isArray(S.bodyweight)) out.bodyweight = S.bodyweight.map(b => ({ ...b, w: bw(b.w) }))
-  if (S.targetW != null) out.targetW = bw(S.targetW)
+  if (shouldConvertBW) {
+    if (Array.isArray(S.bodyweight)) out.bodyweight = S.bodyweight.map(b => ({ ...b, w: bw(b.w) }))
+    if (S.targetW != null) out.targetW = bw(S.targetW)
+    out.bwUnit = to
+  }
   if (S.exWeights) out.exWeights = Object.fromEntries(Object.entries(S.exWeights).map(([k, v]) => [k, v && typeof v === 'object' ? { ...v, w: c(v.w) } : c(v)]))
   if (S.barWeights) out.barWeights = convBarWeights(S.barWeights, from, to)
   // The plate inventory (S.plates) is carried over as it is, not converted: it is kept per unit
@@ -108,3 +143,4 @@ export function convertStateUnit(S, to) {
   if (S.active) out.active = convSession(S.active)
   return out
 }
+

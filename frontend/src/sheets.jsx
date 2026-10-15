@@ -38,6 +38,7 @@ import { exerciseHistory } from './lib/exercise-history.js'
 import { isBellEx, dbLoadOf, dbLoadFor, withDbLoad, withMeaning, historyAs, entryDbLoad, currentDbLoad, isOneArm, ownedWeightsFor, dumbbellsOf, ownsDumbbells, withDumbbells, presetWeights, cleanWeights } from './lib/dumbbells.js'
 import { policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS, MAX_TRIPLE_SETS, weightIncrement } from './lib/progression.js'
 import { normalizeRepRange } from './lib/rep-range.js'
+import { bwUnitOf } from './lib/units.js'
 import { isBackoff, backoffWeights } from './lib/backoff.js'
 import { isPyramid, normalizePyramid, normalizePyramidRest, normalizePyramidWeight, pyramidFromFlat, flatFromPyramid, pyramidLabel, PYRAMID_MAX, MAX_PYRAMID_SETS, PYRAMID_PRESETS } from './lib/pyramid.js'
 import { MOBILE, shareExport, shareExportBlob, printHtml } from './lib/mobile.js'
@@ -294,7 +295,7 @@ function WeightInput({ value, setValue, unit }) {
 /* ============================ body weight ============================ */
 function BwSheet({ required, onDone, close }) {
   const st = useStore(s => s.S)
-  const unit = st.unit
+  const unit = bwUnitOf(st)
   const bw = lastBW(st)
   const [v, setV] = useState(bw ? bw.w : 70)
   const save = () => {
@@ -372,6 +373,7 @@ function WeighInRow({ b, unit, confirm = false }) {
 // hard to read. The weeks start on the profile's first day of the week.
 function WeighIns() {
   const st = useStore(s => s.S)
+  const unit = bwUnitOf(st)
   const ws = weekStartOf(st)
   const weeks = useMemo(() => weeklyWeights(st.bodyweight, ws), [st.bodyweight, ws])
   const points = useMemo(() => [...weeks].reverse()
@@ -384,7 +386,7 @@ function WeighIns() {
   return <>
     <h3 style={{ marginBottom: 2 }}>{t('Weigh-ins')}</h3>
     <div className="muted small" style={{ marginBottom: 10 }}>{tn('{0} weigh-in', '{0} weigh-ins', n)}</div>
-    <div className="chart"><LineChart points={points} h={140} unit={st.unit} goal={st.targetW} /></div>
+    <div className="chart"><LineChart points={points} h={140} unit={unit} goal={st.targetW} /></div>
     <div className="small dim" style={{ marginTop: 6 }}>{t('Weekly average')}</div>
     {weeks.map(w => {
       // Only a change the display can show: at one decimal, 0.02 kg is "0", and an arrow over a
@@ -397,10 +399,10 @@ function WeighIns() {
             {moved && <span className="row" style={{ gap: 2, fontWeight: 500, color: bwDeltaColor(w.delta, w.avg) }}>
               <Icon name={w.delta > 0 ? 'arrowUp' : 'arrowDown'} style={{ fontSize: 12 }} />{fmtNum(Math.abs(w.delta))}
             </span>}
-            <span className="muted" style={{ whiteSpace: 'nowrap' }}>{t('Average {0}', fmtNum(w.avg) + ' ' + st.unit)}</span>
+            <span className="muted" style={{ whiteSpace: 'nowrap' }}>{t('Average {0}', fmtNum(w.avg) + ' ' + unit)}</span>
           </span>
         </div>
-        <div className="list" style={{ gap: 0 }}>{w.entries.map(b => <WeighInRow key={b.d} b={b} unit={st.unit} confirm />)}</div>
+        <div className="list" style={{ gap: 0 }}>{w.entries.map(b => <WeighInRow key={b.d} b={b} unit={unit} confirm />)}</div>
       </div>
     })}
   </>
@@ -712,19 +714,20 @@ export function bwDeltaColor(delta, currentW) {
 }
 function GoalSheet({ close }) {
   const st = S()
+  const unit = bwUnitOf(st)
   const bw = lastBW(st)
-  const [v, setV] = useState(st.targetW || (bw ? bw.w : 70))
+  const [v, setV] = useState(st.targetW || (bw ? bw.w : (unit === 'lb' ? 150 : 70)))
   return <>
     <h3>{t('Target weight')}</h3>
     <div className="muted small">{t('Your goal is drawn as a line through the weight charts, and gains/losses are colored by whether they move toward it.')}</div>
-    <WeightInput value={v} setValue={setV} unit={st.unit} />
+    <WeightInput value={v} setValue={setV} unit={unit} />
     <div style={{ height: 14 }} />
     <Button variant="primary" onClick={() => {
       const n = Math.round((v || 0) * 10) / 10
       if (!n || n <= 0) { toast(t('Enter a valid weight')); return }
-      if (bwTooHeavy(n, st.unit)) return
+      if (bwTooHeavy(n, unit)) return
       update(s => { s.targetW = n }); close()
-      const b = lastBW(S()); toast(t('Goal set: {0}', fmtNum(n) + ' ' + st.unit) + (b ? ' (' + t('{0} to go', fmtNum(Math.abs(n - b.w))) + ')' : ''))
+      const b = lastBW(S()); toast(t('Goal set: {0}', fmtNum(n) + ' ' + unit) + (b ? ' (' + t('{0} to go', fmtNum(Math.abs(n - b.w))) + ')' : ''))
     }}>{t('Save goal')}</Button>
     {st.targetW && <><div style={{ height: 8 }} /><Button variant="danger" onClick={() => { update(s => { s.targetW = null }); close(); toast(t('Goal removed')) }}>{t('Remove goal')}</Button></>}
   </>

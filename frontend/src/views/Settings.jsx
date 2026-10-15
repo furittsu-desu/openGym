@@ -4,6 +4,7 @@ import { useStore, DEF, hasData } from '../store/useStore.js'
 import { healthStatus, loadHealth, enableHealth, disableHealth, openHealthConnect, onHealthChange } from '../lib/health-sync.js'
 import { workoutControls } from '../lib/workout-controls.js'
 import { speedUnitOf } from '../lib/speed.js'
+import { bwUnitOf } from '../lib/units.js'
 import { formulaOf, FORMULA_NAMES } from '../lib/onerm.js'
 import { copyText } from '../lib/clipboard.js'
 import { useUI } from '../store/useUI.js'
@@ -95,7 +96,7 @@ export default function Settings({ page = null, find = null, via = null }) {
   const passkeys = usePasskeys(!!user && !MOBILE && !DEMO && (page === 'account'))
   const [credsV, setCredsV] = useState(0)
   const credsChanged = () => { passkeys.load(); setCredsV(v => v + 1) }
-  const { update, importConflict, importBackup, setUnit, resetEverything: resetAll, setUser, pullState, pushState, resetDemo } = useStore()
+  const { update, importConflict, importBackup, setUnit, setBodyweightUnit, resetEverything: resetAll, setUser, pullState, pushState, resetDemo } = useStore()
   const toast = useUI(s => s.toast)
   const fileRef = useRef(null)
   const importRef = useRef(null)
@@ -114,10 +115,22 @@ export default function Settings({ page = null, find = null, via = null }) {
     if (v === S.unit) return
     menuSheet({
       title: t('Convert to {0}?', v),
-      subtitle: t('Every stored weight (logged sets, working weights, routine targets, body weight, bar weights) is in {0}. Convert the numbers, or keep them and only change the label?', S.unit),
+      subtitle: t('Every stored workout weight (logged sets, working weights, routine targets, bar weights) is in {0}. Convert the numbers, or keep them and only change the label?', S.unit),
       items: [
         { icon: 'calculator', label: t('Convert the numbers'), onClick: () => setUnit(v) },
         { icon: 'pencil', label: t('Keep the numbers, change the label'), onClick: () => setUnit(v, { convert: false }) },
+      ],
+    })
+  }
+
+  const switchBwUnit = v => {
+    if (v === bwUnitOf(S)) return
+    menuSheet({
+      title: t('Convert body weight to {0}?', v),
+      subtitle: t('Every stored weigh-in and your target weight is in {0}. Convert the numbers, or keep them and only change the label?', bwUnitOf(S)),
+      items: [
+        { icon: 'calculator', label: t('Convert the numbers'), onClick: () => setBodyweightUnit(v) },
+        { icon: 'pencil', label: t('Keep the numbers, change the label'), onClick: () => setBodyweightUnit(v, { convert: false }) },
       ],
     })
   }
@@ -672,6 +685,11 @@ export default function Settings({ page = null, find = null, via = null }) {
           <Segmented className="seg-inline"
             options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
             value={S.unit} onChange={v => switchUnit(v)} />
+        </Row>
+        <Row icon="user" iconTint="var(--teal)" title={t('Body weight unit')}>
+          <Segmented className="seg-inline"
+            options={[{ value: 'kg', label: 'kg' }, { value: 'lb', label: 'lb' }]}
+            value={bwUnitOf(S)} onChange={v => switchBwUnit(v)} />
         </Row>
         {/* Display only: one decimal reads fine for plate-loadable numbers, two for anyone whose
             per-side figure lands on .25 or .75, or who loads microplates (issue #139). Nothing is

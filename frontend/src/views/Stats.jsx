@@ -5,6 +5,7 @@ import { EXIDX, matchExercise, betterWeight, isAssisted } from '../lib/exercises
 import { lastBW, streakWeeks, setLabel, modeOf, effortOf, entriesForExercise, metricEntriesForExercise, metricModeForEntry, bestWeightForEntry, completedRepsOf, workoutDay, workoutAt } from '../lib/history.js'
 import { fmtNum, fmtDate, fmtVol, todayISO, isoOf, weekKey, weekStartOf, exerciseNameText } from '../lib/format.js'
 import { speedUnitOf, speedLabel, toSpeed } from '../lib/speed.js'
+import { bwUnitOf } from '../lib/units.js'
 import { t, exerciseNameFor, exerciseNameClass, getLang } from '../lib/i18n.js'
 import { bwSheet, goalSheet, calendarSheet, dayOverrideSheet, workoutDetailSheet, exerciseHistorySheet, WorkoutRow, bwDeltaColor, weighInsSheet } from '../sheets.jsx'
 import LineChart from '../components/LineChart.jsx'
@@ -119,7 +120,7 @@ function profileBodyweightKg(S) {
   if (!entries.length) return null
   const last = entries.slice().sort((a, b) => String(a.d).localeCompare(String(b.d))).at(-1)
   if (!last || !(last.w > 0)) return null
-  return S.unit === 'lb' ? last.w * LB_TO_KG : last.w
+  return bwUnitOf(S) === 'lb' ? last.w * LB_TO_KG : last.w
 }
 
 function MuscleBalance({ S }) {
@@ -132,7 +133,7 @@ function MuscleBalance({ S }) {
   const now = useNow()
   const lang = getLang()
   const workouts = S.workouts
-  const bodyweightKg = useMemo(() => profileBodyweightKg(S), [S.bodyweight, S.unit])
+  const bodyweightKg = useMemo(() => profileBodyweightKg(S), [S.bodyweight, S.bwUnit, S.unit])
   const fatigue = useMemo(() => fatigueOf(workouts, now, { bodyweightKg, unit: S.unit }), [workouts, now, bodyweightKg, S.unit])
   const strength = useMemo(() => strengthOf(workouts, now, { bodyweightKg, unit: S.unit }), [workouts, now, bodyweightKg, S.unit])
   const muscleExercises = useMemo(() => (sel ? strengthExerciseRowsForMuscle(S, now, sel) : []), [S, now, sel, lang])
@@ -322,7 +323,7 @@ function EffortCard({ S }) {
   const blend = logged.rated < MIN_RATED
   // Same options as the fatigue map (unit + profile bodyweight), so a bodyweight set is
   // estimated against the same body-mass-inclusive anchor in both places.
-  const opts = useMemo(() => ({ unit: S.unit, bodyweightKg: profileBodyweightKg(S) }), [S.unit, S.bodyweight])
+  const opts = useMemo(() => ({ unit: S.unit, bodyweightKg: profileBodyweightKg(S) }), [S.unit, S.bodyweight, S.bwUnit])
   const anchors = useMemo(
     () => (blend ? anchorsByWorkout(S.workouts, opts) : new Map()),
     [blend, S.workouts, opts],
@@ -427,6 +428,7 @@ export default function Stats() {
   const kind = displayScale(S)
   const hd = scaleName(kind)
 
+  const bwUnit = bwUnitOf(S)
   const bwPts = S.bodyweight.filter(b => range === 0 || (b.t || new Date(b.d).getTime()) > now - range * 86400000)
     .map(b => ({ t: b.t || new Date(b.d).getTime(), y: b.w, d: b.d }))
   const bw30 = S.bodyweight.filter(b => (b.t || new Date(b.d).getTime()) > now - 30 * 86400000)
@@ -640,7 +642,7 @@ export default function Stats() {
       <div className="tile"><div className="l"><Icon name="dumbbell" />{t('Workouts')}</div><div className="v">{workouts.length}</div></div>
       <div className="tile"><div className="l"><Icon name="calendar" />{t('This month')}</div><div className="v">{monthW}</div></div>
       <div className="tile"><div className="l"><Icon name="flame" />{t('Week streak')}</div><div className="v">{streakWeeks(S)}</div></div>
-      <div className="tile"><div className="l"><Icon name="scale" />{t('Weight 30d')}</div><div className="v" style={{ fontSize: 22, color: bwDelta30 === null ? 'inherit' : bwDeltaColor(bwDelta30, (lastBW(S) || {}).w || 0) }}>{bwDelta30 === null ? '–' : (bwDelta30 > 0 ? '+' : '') + fmtNum(bwDelta30) + ' ' + S.unit}</div></div>
+      <div className="tile"><div className="l"><Icon name="scale" />{t('Weight 30d')}</div><div className="v" style={{ fontSize: 22, color: bwDelta30 === null ? 'inherit' : bwDeltaColor(bwDelta30, (lastBW(S) || {}).w || 0) }}>{bwDelta30 === null ? '–' : (bwDelta30 > 0 ? '+' : '') + fmtNum(bwDelta30) + ' ' + bwUnit}</div></div>
 
     </div>
 
@@ -686,7 +688,7 @@ export default function Stats() {
         </div>
         <Segmented className="seg-range" value={range} onChange={setRange}
           options={rangeOptions()} />
-        <div className="chart"><LineChart points={bwPts} h={160} unit={S.unit} goal={S.targetW} /></div>
+        <div className="chart"><LineChart points={bwPts} h={160} unit={bwUnit} goal={S.targetW} /></div>
         {/* every weigh-in, week by week with its average (Discord 'Weight') */}
         {S.bodyweight.length > 0 && <div className="row" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
           <Button size="sm" variant="ghost" trailingIcon="chevronRight" onClick={weighInsSheet}>{t('All weigh-ins')}</Button>

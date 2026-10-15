@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { convertWeight, convertStateUnit } from './units.js'
+import { convertWeight, convertStateUnit, bwUnitOf, convertBodyWeightState, dualUnit } from './units.js'
 import { workoutVolume } from './history.js'
 import { inventoryFor, withPlatePairs } from './plates.js'
 
@@ -144,3 +144,57 @@ describe('convertStateUnit: plate inventories', () => {
     expect(back.plates.kg).toMatchObject({ 20: 1, _ts: 60 })
   })
 })
+
+describe('decoupled bodyweight unit', () => {
+  it('bwUnitOf defaults to S.bwUnit, then S.unit, then kg', () => {
+    expect(bwUnitOf({ bwUnit: 'lb', unit: 'kg' })).toBe('lb')
+    expect(bwUnitOf({ bwUnit: 'kg', unit: 'lb' })).toBe('kg')
+    expect(bwUnitOf({ unit: 'lb' })).toBe('lb')
+    expect(bwUnitOf({ unit: 'kg' })).toBe('kg')
+    expect(bwUnitOf({})).toBe('kg')
+    expect(bwUnitOf(null)).toBe('kg')
+  })
+
+  it('convertBodyWeightState converts only bodyweight and targetW and sets bwUnit', () => {
+    const S = {
+      unit: 'lb',
+      bwUnit: 'lb',
+      targetW: 176.4,
+      bodyweight: [{ d: '2026-01-01', w: 176.4, t: 1 }],
+      workouts: [{ id: 'w1', entries: [{ id: '0025', sets: [{ w: 135, r: 5 }] }] }]
+    }
+    const out = convertBodyWeightState(S, 'kg')
+    expect(out.bwUnit).toBe('kg')
+    expect(out.unit).toBe('lb')
+    expect(out.targetW).toBe(80)
+    expect(out.bodyweight[0].w).toBe(80)
+    // Workouts remain untouched in lbs
+    expect(out.workouts[0].entries[0].sets[0].w).toBe(135)
+  })
+
+  it('convertStateUnit preserves decoupled bwUnit when user already chose one', () => {
+    const S = {
+      unit: 'lb',
+      bwUnit: 'kg',
+      targetW: 80,
+      bodyweight: [{ d: '2026-01-01', w: 80, t: 1 }],
+      workouts: [{ id: 'w1', entries: [{ id: '0025', sets: [{ w: 135, r: 5 }] }] }]
+    }
+    const out = convertStateUnit(S, 'kg')
+    expect(out.unit).toBe('kg')
+    expect(out.bwUnit).toBe('kg')
+    expect(out.targetW).toBe(80)
+    expect(out.bodyweight[0].w).toBe(80)
+    // Workout converted to kg
+    expect(out.workouts[0].entries[0].sets[0].w).toBe(61.25)
+  })
+
+  it('dualUnit formats secondary unit conversion', () => {
+    expect(dualUnit(135, 'lb')).toBe('~61.2 kg')
+    expect(dualUnit(225, 'lb')).toBe('~102.1 kg')
+    expect(dualUnit(60, 'kg')).toBe('~132.3 lb')
+    expect(dualUnit(0, 'lb')).toBe('')
+    expect(dualUnit(null, 'lb')).toBe('')
+  })
+})
+

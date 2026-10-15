@@ -46,6 +46,7 @@ import { nextOpenSet, workoutKeyAction } from '../lib/workout-keys.js'
 import { MUSCLE_NAME } from '../lib/muscles.js'
 import FocusView from './FocusView.jsx'
 import { withMeaning, historyAs, dbLoadFor, entryDbLoad, bellsIn, ownedWeightsFor, stepOwned } from '../lib/dumbbells.js'
+import { dualUnit } from '../lib/units.js'
 
 // How long after a key starts a hold the same key is not yet its "Done" (#133). A USB button
 // that bounces, or a double press, sends two presses a moment apart: the first starts the hold,
@@ -352,8 +353,8 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
         if (L && R && L !== R) return
         w = L || R
       }
-      out.push({ key: String(i), load: rowLoad(loadKind, w, base, inv) })
-      dropsOf(s).forEach((d, di) => out.push({ key: i + ':d' + di, load: rowLoad(loadKind, d.w, base, inv) }))
+      out.push({ key: String(i), load: rowLoad(loadKind, w, base, inv), w })
+      dropsOf(s).forEach((d, di) => out.push({ key: i + ':d' + di, load: rowLoad(loadKind, d.w, base, inv), w: d.w }))
     })
     return out
   })()
@@ -368,12 +369,14 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
   // What to strip and what to add rides along, except in the compact view.
   const loadLine = key => {
     const at = loadSeq.findIndex(x => x.key === key)
-    const L = at >= 0 ? loadSeq[at].load : null
+    const item = at >= 0 ? loadSeq[at] : null
+    const L = item ? item.load : null
     if (!L) return null
     let p = at - 1
     while (p >= 0 && !loadSeq[p].load) p--
     const prev = p >= 0 ? loadSeq[p].load : null
     if (prev && sameLoad(prev, L)) return null
+    const alt = item?.w > 0 ? dualUnit(item.w, S.unit) : ''
     // "+" between plates: "45 + 5 per side" reads as a sum, a dot did not (Boris, 2026-09-13).
     const stack = L.plates.map(w => fmtPlate(w)).join(' + ')
     const text = L.barOnly ? t('Bar only')
@@ -383,6 +386,7 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
     return <div className="plateline">
       <Icon name="plate" />
       <span>{text}{L.missing > 0 && <> · <span className="short">{t('{0} short', fmtPlate(L.missing) + ' ' + S.unit)}</span></>}</span>
+      {alt && <span className="altunit dim">({alt})</span>}
       {moves.length > 0 && <span className="moves">{moves.join(' ')}</span>}
     </div>
   }
@@ -664,7 +668,7 @@ function ExerciseBlock({ entryIdx, compact, dense, editing, onToggle, onToggleSi
       {!cardio && isPerSide(cfg) && <span className="tag acc nocap"><Icon name="sides" />{t('Per side')}</span>}
       {(ex.tg || ex.bp) && <span className="tag">{t(MUSCLE_NAME[ex.tg] || ex.tg || ex.bp)}</span>}
       {ex.eq && <span className="tag">{t(ex.eq)}</span>}
-      {best > 0 && <span className="tag nocap">{t('Best:')} {fmtNum(best)} {S.unit}</span>}
+      {best > 0 && <span className="tag nocap">{t('Best:')} {fmtNum(best)} {S.unit}{dualUnit(best, S.unit) ? ` (${dualUnit(best, S.unit)})` : ''}</span>}
     </div>
     {/* Three notes can apply to one exercise and they are not interchangeable, so each keeps its
         own line and its own icon: the plan's instruction (cfg.note, from the routine), the

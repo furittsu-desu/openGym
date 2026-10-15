@@ -11,7 +11,7 @@ import { initHealthSync, syncHealth } from '../lib/health-sync.js'
 import { refillIfComplete } from '../lib/rotation.js'
 import { liftLegacy } from '../lib/sync-legacy.js'
 import { mergeStates, localExtras, stampChange, highestStamp, stampRestore, stampReplace, inUnitOf, keepReset, resetIdsOf, mergeResetIds, entryKey } from '../lib/sync-merge.js'
-import { convertStateUnit } from '../lib/units.js'
+import { convertStateUnit, bwUnitOf, convertBodyWeightState } from '../lib/units.js'
 import { pendingRefCount, settleMedia, loadPending } from '../lib/media-owed.js'
 import { referencedHashes } from '../lib/media-refs.js'
 import { mediaStore, mediaStoreInUse } from '../lib/media-store.js'
@@ -1367,6 +1367,13 @@ export const useStore = create((set, get) => {
       S.unitSet = { at: Math.max(Date.now(), highestStamp(S0) + 1), convert }
       persist(S, true)
       return convert && get().ready ? get().pushState() : null
+    },
+    setBodyweightUnit(to, { convert = true } = {}) {
+      const S0 = get().S
+      if (bwUnitOf(S0) === to) return null
+      const S = clone(convert ? convertBodyWeightState(S0, to) : { ...S0, bwUnit: to })
+      persist(S, true)
+      return get().ready ? get().pushState() : null
     },
     // Settings → Reset everything: a new profile (restartedState), stamped with when (`resetAt`).
     // Pushed as a replace, and the stamp is what makes it hold: a device that has not seen the
